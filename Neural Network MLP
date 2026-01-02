@@ -1,0 +1,71 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.neural_network import MLPClassifier
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+
+# 1. Load the Dataset
+# URL for the UCI Banknote Authentication dataset
+url = "data_banknote_authentication.txt"
+# Define column names based on dataset documentation
+columns = ["Variance", "Skewness", "Curtosis", "Entropy", "Class"]
+data = pd.read_csv(url, names=columns, header=None)
+
+# Display first few rows to verify data loading (Analysis purpose)
+print("Dataset Head:\n", data.head())
+
+# 2. Preprocessing
+# Separate features (X) and target label (y)
+X = data.drop('Class', axis=1)  # Input features
+y = data['Class']               # Target variable (0 or 1)
+
+# Split data into training (80%) and testing (20%) sets
+# This ensures we have unseen data to test the model's performance
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Standardize features by removing the mean and scaling to unit variance
+# Neural Networks perform better when input data is scaled
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+
+# 3. Model Training (Neural Network)
+# Initialize Multi-Layer Perceptron (MLP) Classifier
+# hidden_layer_sizes=(10, 10): Two hidden layers with 10 neurons each
+# max_iter=1000: Maximum number of epochs to train
+mlp = MLPClassifier(hidden_layer_sizes=(10, 10), activation='relu', solver='adam', max_iter=1000, random_state=42)
+
+# Train the model using the training data
+mlp.fit(X_train, y_train)
+
+# 4. Predictions
+# Use the trained model to predict the class for the test set
+y_pred = mlp.predict(X_test)
+
+# 5. Evaluation & Results
+# Calculate the confusion matrix
+cm = confusion_matrix(y_test, y_pred)
+
+# Print standard performance metrics (Accuracy, Precision, Recall, F1-Score)
+print("\nConfusion Matrix:\n", cm)
+print("\nClassification Report:\n", classification_report(y_test, y_pred))
+
+# 6. Visualization
+# Plot the Confusion Matrix as a heatmap
+plt.figure(figsize=(6,5))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Authentic', 'Fake'], yticklabels=['Authentic', 'Fake'])
+plt.title('Confusion Matrix: Banknote Authentication')
+plt.xlabel('Predicted')
+plt.ylabel('Actual')
+plt.show()
+
+# Plot the Loss Curve (Training progress)
+plt.figure(figsize=(6,5))
+plt.plot(mlp.loss_curve_)
+plt.title('Model Training Loss Curve')
+plt.xlabel('Iterations')
+plt.ylabel('Loss')
+plt.show()
