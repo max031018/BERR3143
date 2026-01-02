@@ -1,0 +1,102 @@
+# Import necessary libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import skfuzzy as fuzz  # The Fuzzy Logic library
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+
+# 1. Load the Dataset
+url = "data_banknote_authentication.txt"
+columns = ["Variance", "Skewness", "Curtosis", "Entropy", "Class"]
+data = pd.read_csv(url, names=columns, header=None)
+
+# 2. Preprocessing
+X = data.drop('Class', axis=1).values # Convert to numpy array immediately
+y = data['Class'].values
+
+# Split data (80% Train, 20% Test)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Standardize features
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+# !!! IMPORTANT FOR SKFUZZY !!!
+# scikit-fuzzy expects data shape as (n_features, n_samples), NOT (n_samples, n_features)
+# We must transpose the data (.T)
+X_train_T = X_train.T
+X_test_T = X_test.T
+
+print("Training Fuzzy C-Means Model...")
+
+# 3. Model Training (Fuzzy C-Means)
+# c=2: We want 2 centers (Fake vs Authentic)
+# m=2: Fuzziness coefficient (standard is 2.0)
+cntr, u_train, _, _, _, _, _ = fuzz.cluster.cmeans(
+    data=X_train_T,
+    c=2,
+    m=2,
+    error=0.005,
+    maxiter=1000,
+    init=None
+)
+
+# 4. Predictions
+# We use the calculated centers (cntr) to predict memberships for the Test set
+u_test, _, _, _, _, _ = fuzz.cluster.cmeans_predict(
+    test_data=X_test_T,
+    cntr_trained=cntr,
+    m=2,
+    error=0.005,
+    maxiter=1000
+)
+
+# u_test contains the membership degrees (e.g., [0.8, 0.2]).
+# We take the argmax to find the dominant cluster (0 or 1).
+y_pred_cluster = np.argmax(u_test, axis=0)
+
+# 5. Label Correction (Crucial Step)
+# Fuzzy Clustering is unsupervised; it doesn't know that Cluster 0 is "Authentic".
+# It might assign Cluster 0 to "Fake". We must check and flip labels if necessary.
+# We check accuracy on the training set to see if we need to flip.
+y_train_pred = np.argmax(u_train, axis=0)
+train_acc = accuracy_score(y_train, y_train_pred)
+
+if train_acc < 0.5:
+    print(f"Cluster labels are flipped (Accuracy: {train_acc:.2f}). Correcting...")
+    # Flip predictions (0 becomes 1, 1 becomes 0)
+    y_pred = 1 - y_pred_cluster
+else:
+    y_pred = y_pred_cluster
+
+# 6. Evaluation & Results
+cm = confusion_matrix(y_test, y_pred)
+
+print("\nConfusion Matrix:\n", cm)
+print("\nClassification Report:\n", classification_report(y_test, y_pred))
+
+# 7. Visualization
+# Plot Confusion Matrix
+plt.figure(figsize=(6,5))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Greens', xticklabels=['Authentic', 'Fake'], yticklabels=['Authentic', 'Fake'])
+plt.title('Confusion Matrix: Fuzzy C-Means')
+plt.xlabel('Predicted')
+plt.ylabel('Actual')
+plt.show()
+
+# Visualize Membership Degrees (Fuzzy Logic characteristic)
+# Show how "fuzzy" the decisions were for the first 20 test points
+plt.figure(figsize=(10, 4))
+plt.plot(u_test[0, :20], 'o-', label='Membership to Cluster 0')
+plt.plot(u_test[1, :20], 'x-', label='Membership to Cluster 1')
+plt.axhline(0.5, color='red', linestyle='--')
+plt.title('Fuzzy Membership Degrees (First 20 Test Samples)')
+plt.ylabel('Membership Degree (0 to 1)')
+plt.xlabel('Sample Index')
+plt.legend()
+plt.show()
+ fuzzy
